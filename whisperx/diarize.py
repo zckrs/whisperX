@@ -4,9 +4,18 @@ from pyannote.audio import Pipeline
 from typing import Optional, Union
 import torch
 
+import os
+import psutil
+
+
 from .audio import load_audio, SAMPLE_RATE
 from .types import TranscriptionResult, AlignedTranscriptionResult
 
+def memory_usage():
+    process = psutil.Process(os.getpid())
+    mem_info = process.memory_info()
+    virtual_mem = psutil.virtual_memory()
+    print(f"Memory used: {mem_info.rss / (1024 ** 2):.2f} MB | Virtual memory used: {virtual_mem.used / (1024 ** 2):.2f} MB")
 
 class DiarizationPipeline:
     def __init__(
@@ -32,11 +41,14 @@ class DiarizationPipeline:
             'waveform': torch.from_numpy(audio[None, :]),
             'sample_rate': SAMPLE_RATE
         }
+        memory_usage()
         segments = self.model(audio_data, num_speakers = num_speakers, min_speakers=min_speakers, max_speakers=max_speakers)
-        diarize_df = pd.DataFrame(
-            ((segment.start, segment.end, label) for segment, _, label in segments.itertracks(yield_label=True)),
-            columns=['start', 'end', 'speaker']
-        )
+        memory_usage()
+        diarize_df = pd.DataFrame(segments.itertracks(yield_label=True), columns=['segment', 'label', 'speaker'])
+        memory_usage()
+        diarize_df['start'] = diarize_df['segment'].apply(lambda x: x.start)
+        diarize_df['end'] = diarize_df['segment'].apply(lambda x: x.end)
+        memory_usage()
         return diarize_df
 
 
