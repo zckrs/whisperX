@@ -24,9 +24,14 @@ class DiarizationPipeline:
         use_auth_token=None,
         device: Optional[Union[str, torch.device]] = "cpu",
     ):
+        print("Loading model...")
+        print(device)
+        memory_usage()
         if isinstance(device, str):
             device = torch.device(device)
         self.model = Pipeline.from_pretrained(model_name, use_auth_token=use_auth_token).to(device)
+        memory_usage()
+
 
     def __call__(
         self,
@@ -35,6 +40,8 @@ class DiarizationPipeline:
         min_speakers: Optional[int] = None,
         max_speakers: Optional[int] = None,
     ):
+        print("Diarizing...")
+        memory_usage()
         if isinstance(audio, str):
             audio = load_audio(audio)
         audio_data = {
