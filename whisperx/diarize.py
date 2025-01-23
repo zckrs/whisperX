@@ -3,30 +3,12 @@ import pandas as pd
 from pyannote.audio import Pipeline
 from typing import Optional, Union
 import torch
+from scalene import scalene_profiler
 
 from .audio import load_audio, SAMPLE_RATE
 from .types import TranscriptionResult, AlignedTranscriptionResult
 
-
-def split_audio(audio: np.ndarray, segment_duration: float = 10.0, sample_rate: int = SAMPLE_RATE):
-    """
-    Divise un fichier audio en segments plus courts.
-
-    Args:
-        audio (np.ndarray): Signal audio chargé.
-        segment_duration (float): Durée de chaque segment en secondes.
-        sample_rate (int): Taux d'échantillonnage de l'audio.
-
-    Returns:
-        List[np.ndarray]: Liste de segments audio.
-    """
-    num_samples_per_segment = int(segment_duration * sample_rate)
-    segments = [
-        audio[i : i + num_samples_per_segment]
-        for i in range(0, len(audio), num_samples_per_segment)
-    ]
-    return segments
-
+scalene_profiler.start()
 class DiarizationPipeline:
     def __init__(
         self,
@@ -45,46 +27,18 @@ class DiarizationPipeline:
         num_speakers: Optional[int] = None,
         min_speakers: Optional[int] = None,
         max_speakers: Optional[int] = None,
-        segment_duration: float = 10.0,
     ):
-        """
-        Exécute la diarization sur des segments audio divisés.
-
-        Args:
-            audio (Union[str, np.ndarray]): Fichier audio ou signal chargé.
-            num_speakers (Optional[int]): Nombre exact d'orateurs.
-            min_speakers (Optional[int]): Nombre minimum d'orateurs.
-            max_speakers (Optional[int]): Nombre maximum d'orateurs.
-            segment_duration (float): Durée de chaque segment audio en secondes.
-
-        Returns:
-            pd.DataFrame: Résultats de la diarization combinés pour tous les segments.
-        """
         if isinstance(audio, str):
             audio = load_audio(audio)
-
-        # Diviser l'audio en segments plus courts
-        segments = split_audio(audio, segment_duration, SAMPLE_RATE)
-
-        results = []
-        for segment_idx, segment in enumerate(segments):
-            # Convertir le segment en format attendu
-            audio_data = {
-                'waveform': torch.from_numpy(segment[None, :]),
-                'sample_rate': SAMPLE_RATE,
-            }
-            result = self.model(
-                audio_data, num_speakers=num_speakers, min_speakers=min_speakers, max_speakers=max_speakers
-            )
-            for turn, _, speaker in result.itertracks(yield_label=True):
-                results.append({
-                    "segment": segment_idx,
-                    "start": turn.start + segment_idx * segment_duration,
-                    "end": turn.end + segment_idx * segment_duration,
-                    "speaker": speaker,
-                })
-
-        return pd.DataFrame(results)
+        audio_data = {
+            'waveform': torch.from_numpy(audio[None, :]),
+            'sample_rate': SAMPLE_RATE
+        }
+        segments = self.model(audio_data, num_speakers = num_speakers, min_speakers=min_speakers, max_speakers=max_speakers)
+        diarize_df = pd.DataFrame(segments.itertracks(yield_label=True), columns=['segment', 'label', 'speaker'])
+        diarize_df['start'] = diarize_df['segment'].apply(lambda x: x.start)
+        diarize_df['end'] = diarize_df['segment'].apply(lambda x: x.end)
+        return diarize_df
 
 
 def assign_word_speakers(
@@ -131,3 +85,4 @@ class Segment:
         self.start = start
         self.end = end
         self.speaker = speaker
+scalene_profiler.stop()
