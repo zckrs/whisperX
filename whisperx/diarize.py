@@ -132,29 +132,28 @@ class DiarizationPipeline:
             'sample_rate': SAMPLE_RATE
         }
 
-        if return_embeddings:
-            diarization, embeddings = self.model(
-                audio_data,
-                num_speakers=num_speakers,
-                min_speakers=min_speakers,
-                max_speakers=max_speakers,
-                return_embeddings=True,
-            )
-        else:
-            diarization = self.model(
-                audio_data,
-                num_speakers=num_speakers,
-                min_speakers=min_speakers,
-                max_speakers=max_speakers,
-            )
-            embeddings = None
+        output = self.model(
+            audio_data,
+            num_speakers=num_speakers,
+            min_speakers=min_speakers,
+            max_speakers=max_speakers,
+        )
 
-        diarize_df = pd.DataFrame(diarization.itertracks(yield_label=True), columns=['segment', 'label', 'speaker'])
-        diarize_df['start'] = diarize_df['segment'].apply(lambda x: x.start)
-        diarize_df['end'] = diarize_df['segment'].apply(lambda x: x.end)
+        diarization = output.speaker_diarization
+        embeddings = output.speaker_embeddings
+
+        diarize_df = pd.DataFrame(
+            diarization.itertracks(yield_label=True),
+            columns=["segment", "label", "speaker"],
+        )
+        diarize_df["start"] = diarize_df["segment"].apply(lambda x: x.start)
+        diarize_df["end"] = diarize_df["segment"].apply(lambda x: x.end)
 
         if return_embeddings and embeddings is not None:
-            speaker_embeddings = {speaker: embeddings[s].tolist() for s, speaker in enumerate(diarization.labels())}
+            speaker_embeddings = {
+                speaker: embeddings[s].tolist()
+                for s, speaker in enumerate(diarization.labels())
+            }
             return diarize_df, speaker_embeddings
         
         # For backwards compatibility
